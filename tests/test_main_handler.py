@@ -32,6 +32,20 @@ def aws_environment():
     with mock_aws():
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
         dynamodb.create_table(
+            TableName=Config.USERS_TABLE,
+            AttributeDefinitions=[
+                {"AttributeName": "userId", "AttributeType": "S"},
+            ],
+            KeySchema=[{"AttributeName": "userId", "KeyType": "HASH"}],
+            BillingMode="PAY_PER_REQUEST",
+        )
+        users_table = dynamodb.Table(Config.USERS_TABLE)
+        users_table.put_item(Item={"userId": "user-1"})
+        users_table.put_item(
+            Item={"userId": "ae40fbce-5318-4fbe-9087-a50d18fea769"}
+        )
+
+        dynamodb.create_table(
             TableName=Config.TRANSACTIONS_TABLE,
             AttributeDefinitions=[
                 {"AttributeName": "transactionId", "AttributeType": "S"},
@@ -115,3 +129,64 @@ def test_should_skip_silently_when_transaction_already_processed(aws_environment
     response = table.scan()
     matching = [i for i in response["Items"] if i["transactionId"] == "txn-duplicate"]
     assert len(matching) == 1  # não duplicou o registro
+
+
+def test_should_process_api_payload_without_optional_identifiers(aws_environment):
+    from src.main import handler
+
+    event = {
+        "Records": [
+            {
+                "messageId": "sqs-message-1",
+                "body": json.dumps(
+                    {
+                        "userId": "ae40fbce-5318-4fbe-9087-a50d18fea769",
+                        "amount": 250.00,
+                        "currency": "BRL",
+                        "merchant": "Amazon BR",
+                        "merchantCategory": "retail",
+                        "paymentMethod": "CREDIT_CARD",
+                        "cardLastFourDigits": "4532",
+                        "channel": "MOBILE_APP",
+                        "ipAddress": "192.168.1.100",
+                        "deviceId": "device-abc-123",
+                        "latitude": -23.5505,
+                        "longitude": -46.6333,
+                        "billingCountry": "BR",
+                        "occurredAt": "2026-09-03T18:30:00Z",
+                    }
+                ),
+            }
+        ]
+    }
+
+    handler(event, context=None)
+
+    table = aws_environment["dynamodb"].Table(Config.TRANSACTIONS_TABLE)
+    item = table.get_item(Key={"transactionId": "sqs-message-1"})["Item"]
+    assert item["userId"] == "ae40fbce-5318-4fbe-9087-a50d18fea769"
+    assert item["status"] == "APPROVED"
+    assert item["merchantCategory"] == "retail"
+    assert item["paymentMethod"] == "CREDIT_CARD"
+    assert item["cardLastFourDigits"] == "4532"
+    assert item["channel"] == "MOBILE_APP"
+    assert item["ipAddress"] == "192.168.1.100"
+    assert item["deviceId"] == "device-abc-123"
+    assert item["billingCountry"] == "BR"
+    assert item["createdAt"] == "2026-09-03T18:30:00+00:00"
+
+
+def test_should_reject_transaction_when_user_does_not_exist(aws_environment):
+    from src.main import handler
+
+    event = {
+        "Records": [_sqs_record("txn-unknown-user", "2026-08-20T14:00:00Z")]
+    }
+
+    result = handler(event, context=None)
+
+    assert result == {
+        "batchItemFailures": [{"itemIdentifier": "msg-txn-unknown-user"}]
+    }
+    table = aws_environment["dynamodb"].Table(Config.TRANSACTIONS_TABLE)
+    assert "Item" not in table.get_item(Key={"transactionId": "txn-unknown-user"})

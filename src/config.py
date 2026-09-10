@@ -13,10 +13,8 @@ class Config:
     SNS_TOPIC_ARN: str = os.environ["SNS_TOPIC_ARN"]
     ENVIRONMENT: str = os.environ.get("ENVIRONMENT", "dev")
 
-    # Regra: horário de madrugada considerado de maior risco.
     SUSPICIOUS_HOUR_START: int = int(os.environ.get("SUSPICIOUS_HOUR_START", "2"))
     SUSPICIOUS_HOUR_END: int = int(os.environ.get("SUSPICIOUS_HOUR_END", "7"))
 
-    # Regra: velocidade de transações (quantidade em uma janela de tempo).
     VELOCITY_WINDOW_MINUTES: int = int(os.environ.get("VELOCITY_WINDOW_MINUTES", "2"))
     VELOCITY_MAX_TRANSACTIONS: int = int(os.environ.get("VELOCITY_MAX_TRANSACTIONS", "3"))

@@ -29,8 +29,6 @@ class VelocityRule(FraudRule):
         transaction: TransactionEvent,
         recent_history: list[TransactionEvent],
     ) -> str | None:
-        # +1 porque a transação atual ainda não está no histórico
-        # (o histórico é buscado antes de esta transação ser persistida).
         count_in_window = len(recent_history) + 1
 
         if count_in_window > self._max_transactions:

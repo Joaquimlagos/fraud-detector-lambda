@@ -21,7 +21,7 @@ variable "project_name" {
 }
 
 variable "lambda_code_path" {
-  description = "Caminho para o código-fonte da Lambda. Local ao próprio repositório agora — sem mais dependência de caminho relativo cruzando repositórios."
+  description = "Caminho para a raiz do repositório, mantendo o pacote Python no diretório src/."
   type        = string
-  default     = "../src"
+  default     = ".."
 }

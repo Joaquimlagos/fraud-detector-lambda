@@ -8,10 +8,12 @@ from __future__ import annotations
 from src.models.analysis_result import AnalysisResult
 from src.models.transaction_event import TransactionEvent
 from src.rules.base import FraudRule
+from src.rules.impossible_travel_rule import ImpossibleTravelRule
 from src.rules.time_of_day_rule import TimeOfDayRule
 from src.rules.velocity_rule import VelocityRule
 
 DEFAULT_RULES: list[FraudRule] = [
+    ImpossibleTravelRule(),
     TimeOfDayRule(),
     VelocityRule(),
 ]

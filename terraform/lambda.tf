@@ -17,7 +17,8 @@ data "archive_file" "lambda_package" {
     "__pycache__",
     "*.pyc",
     ".pytest_cache",
-    "tests"
+    "tests",
+    "terraform/*"
   ]
 }
 
@@ -25,7 +26,7 @@ resource "aws_lambda_function" "fraud_detection" {
   filename         = data.archive_file.lambda_package.output_path
   function_name    = "${var.project_name}-fraud-detection-${var.environment}"
   role             = aws_iam_role.lambda_role.arn
-  handler          = "main.handler"
+  handler          = "src.main.handler"
   source_code_hash = data.archive_file.lambda_package.output_base64sha256
   runtime          = "python3.11"
   timeout          = 30
@@ -34,10 +35,10 @@ resource "aws_lambda_function" "fraud_detection" {
   environment {
     variables = {
       TRANSACTIONS_TABLE = data.aws_dynamodb_table.transactions.name
-      USERS_TABLE         = data.aws_dynamodb_table.users.name
-      SNS_TOPIC_ARN        = data.aws_sns_topic.fraud_alerts.arn
-      SQS_QUEUE_URL         = data.aws_sqs_queue.transactions.url
-      ENVIRONMENT            = var.environment
+      USERS_TABLE        = data.aws_dynamodb_table.users.name
+      SNS_TOPIC_ARN      = data.aws_sns_topic.fraud_alerts.arn
+      SQS_QUEUE_URL      = data.aws_sqs_queue.transactions.url
+      ENVIRONMENT        = var.environment
     }
   }
 
@@ -48,8 +49,9 @@ resource "aws_lambda_function" "fraud_detection" {
 }
 
 resource "aws_lambda_event_source_mapping" "sqs_trigger" {
-  event_source_arn = data.aws_sqs_queue.transactions.arn
-  function_name    = aws_lambda_function.fraud_detection.arn
-  batch_size       = 5
-  enabled          = true
+  event_source_arn        = data.aws_sqs_queue.transactions.arn
+  function_name           = aws_lambda_function.fraud_detection.arn
+  batch_size              = 5
+  enabled                 = true
+  function_response_types = ["ReportBatchItemFailures"]
 }

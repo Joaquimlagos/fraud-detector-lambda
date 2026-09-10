@@ -23,17 +23,19 @@ from src.config import Config
 from src.models.transaction_event import TransactionEvent
 from src.notifications.sns_notifier import FraudAlertNotifier
 from src.repository.transactions_repository import TransactionsRepository
+from src.repository.users_repository import UsersRepository
 from src.rules.engine import AnalysisEngine
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 _repository = TransactionsRepository()
+_users_repository = UsersRepository()
 _notifier = FraudAlertNotifier()
 _engine = AnalysisEngine()
 
 
-def handler(event: dict, context) -> None:
+def handler(event: dict, context: object) -> dict[str, list[dict[str, str]]]:
     records = event.get("Records", [])
     logger.info("Processing %d SQS message(s)", len(records))
 
@@ -48,35 +50,39 @@ def handler(event: dict, context) -> None:
             failures.append(message_id)
 
     if failures:
-        # Sem partial batch failure reporting configurado no event source
-        # mapping, uma exceção aqui faz o SQS reentregar o LOTE inteiro
-        # (inclusive as mensagens que já processaram com sucesso). Para um
-        # lote maior que 1 em produção, vale configurar
-        # function_response_types = ["ReportBatchItemFailures"] no
-        # aws_lambda_event_source_mapping para reentregar só as que
-        # falharam.
-        raise RuntimeError(f"Failed to process {len(failures)} message(s): {failures}")
+        return {"batchItemFailures": [{"itemIdentifier": message_id} for message_id in failures]}
+
+    return {"batchItemFailures": []}
 
 
 def _process_record(record: dict) -> None:
     body = json.loads(record["body"])
-    transaction = TransactionEvent.from_dict(body)
+    transaction = TransactionEvent.from_dict(
+        body, fallback_transaction_id=record["messageId"]
+    )
 
     logger.info("Analyzing transaction %s for user %s", transaction.transaction_id, transaction.user_id)
+
+    if not _users_repository.exists(transaction.user_id):
+        raise ValueError(f"User {transaction.user_id} does not exist")
 
     recent_history = _repository.find_recent_by_user(
         user_id=transaction.user_id,
         window_minutes=Config.VELOCITY_WINDOW_MINUTES,
     )
+    last_transaction = _repository.find_last_by_user(transaction.user_id)
+    history = recent_history
+    if last_transaction is not None and all(
+        item.transaction_id != last_transaction.transaction_id for item in history
+    ):
+        history = [*history, last_transaction]
 
-    result = _engine.analyze(transaction, recent_history)
+    result = _engine.analyze(transaction, history)
 
     try:
         _repository.save(transaction, result)
     except ClientError as error:
         if error.response["Error"]["Code"] == "ConditionalCheckFailedException":
-            # Já processamos esta transactionId antes (reentrega do SQS).
-            # Não é um erro — apenas não reprocessa nem notifica de novo.
             logger.info("Transaction %s already processed, skipping", transaction.transaction_id)
             return
         raise

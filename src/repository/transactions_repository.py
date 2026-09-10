@@ -42,6 +42,17 @@ class TransactionsRepository:
 
         return [_item_to_transaction_event(item) for item in response.get("Items", [])]
 
+    def find_last_by_user(self, user_id: str) -> TransactionEvent | None:
+        response = self._table.query(
+            IndexName="userId-occurredAt-index",
+            KeyConditionExpression="userId = :uid",
+            ExpressionAttributeValues={":uid": user_id},
+            ScanIndexForward=False,
+            Limit=1,
+        )
+        items = response.get("Items", [])
+        return _item_to_transaction_event(items[0]) if items else None
+
     def save(self, transaction: TransactionEvent, result: AnalysisResult) -> None:
         self._table.put_item(
             Item={
@@ -50,14 +61,21 @@ class TransactionsRepository:
                 "amount": transaction.amount,
                 "currency": transaction.currency,
                 "merchant": transaction.merchant,
+                "merchantCategory": transaction.merchant_category,
+                "paymentMethod": transaction.payment_method,
+                "cardLastFourDigits": transaction.card_last_four_digits,
+                "channel": transaction.channel,
+                "ipAddress": transaction.ip_address,
+                "deviceId": transaction.device_id,
+                "billingCountry": transaction.billing_country,
                 "occurredAt": transaction.occurred_at.isoformat(),
+                "createdAt": transaction.published_at.isoformat(),
+                "latitude": _coordinate_to_decimal(transaction.latitude),
+                "longitude": _coordinate_to_decimal(transaction.longitude),
                 "status": result.status.value,
                 "reasons": result.reasons,
                 "analyzedAt": datetime.now(timezone.utc).isoformat(),
             },
-            # Idempotência: se esta transactionId já foi persistida (ex.
-            # reentrega da mesma mensagem SQS), não sobrescreve nem lança
-            # erro — apenas ignora silenciosamente a segunda tentativa.
             ConditionExpression="attribute_not_exists(transactionId)",
         )
 
@@ -70,5 +88,20 @@ def _item_to_transaction_event(item: dict) -> TransactionEvent:
         currency=item["currency"],
         merchant=item["merchant"],
         occurred_at=datetime.fromisoformat(item["occurredAt"]),
-        published_at=datetime.fromisoformat(item["occurredAt"]),  # não persistido, valor placeholder
+        published_at=datetime.fromisoformat(
+            item.get("createdAt", item["occurredAt"])
+        ),
+        latitude=float(item["latitude"]) if item.get("latitude") is not None else None,
+        longitude=float(item["longitude"]) if item.get("longitude") is not None else None,
+        merchant_category=item.get("merchantCategory"),
+        payment_method=item.get("paymentMethod"),
+        card_last_four_digits=item.get("cardLastFourDigits"),
+        channel=item.get("channel"),
+        ip_address=item.get("ipAddress"),
+        device_id=item.get("deviceId"),
+        billing_country=item.get("billingCountry"),
     )
+
+
+def _coordinate_to_decimal(value: float | None) -> Decimal | None:
+    return Decimal(str(value)) if value is not None else None

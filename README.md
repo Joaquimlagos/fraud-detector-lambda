@@ -114,18 +114,25 @@ Currently implemented:
 
 ## Message contract with `fraud-detector-api`
 
-The SQS message body is a JSON object matching `TransactionEvent` (`src/models/transaction_event.py`), which mirrors `messaging/TransactionEvent.java` in the API repo field-for-field:
+The SQS message body is a JSON object consumed by `TransactionEvent` (`src/models/transaction_event.py`):
 
 ```json
 {
-  "transactionId": "uuid",
-  "userId": "string",
-  "amount": "123.45",
-  "currency": "USD",
-  "merchant": "string",
-  "occurredAt": "2026-08-20T03:00:00Z",
-  "publishedAt": "2026-08-20T03:00:01Z"
+   "userId": "ae40fbce-5318-4fbe-9087-a50d18fea769",
+   "amount": 250.00,
+   "currency": "BRL",
+   "merchant": "Amazon BR",
+   "merchantCategory": "retail",
+   "paymentMethod": "CREDIT_CARD",
+   "cardLastFourDigits": "4532",
+   "channel": "MOBILE_APP",
+   "ipAddress": "192.168.1.100",
+   "deviceId": "device-abc-123",
+   "latitude": -23.5505,
+   "longitude": -46.6333,
+   "billingCountry": "BR",
+   "occurredAt": "2026-09-03T18:30:00Z"
 }
 ```
 
-Changing a field name or type here is a cross-repo breaking change — coordinate with the API repo before renaming anything.
+Additional fields are accepted and ignored by the fraud engine. If `transactionId` is absent, the Lambda uses the SQS `messageId` as the persistence and idempotency key. For business-level deduplication, the API should eventually include a stable `transactionId` in the message.

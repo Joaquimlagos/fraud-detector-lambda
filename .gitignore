@@ -18,3 +18,22 @@ terraform/lambda-function.zip
 __pycache__/
 *.pyc
 .pytest_cache/
+.venv/
+venv/
+env/
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.tox/
+*.log
+
+# Local tools and operating-system files
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

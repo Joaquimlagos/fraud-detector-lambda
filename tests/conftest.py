@@ -37,6 +37,8 @@ def make_transaction():
         merchant: str = "Some Store",
         occurred_at: datetime = datetime(2026, 8, 20, 12, 0, tzinfo=timezone.utc),
         published_at: datetime = datetime(2026, 8, 20, 12, 0, tzinfo=timezone.utc),
+        latitude: float | None = None,
+        longitude: float | None = None,
     ) -> TransactionEvent:
         return TransactionEvent(
             transaction_id=transaction_id,
@@ -46,6 +48,8 @@ def make_transaction():
             merchant=merchant,
             occurred_at=occurred_at,
             published_at=published_at,
+            latitude=latitude,
+            longitude=longitude,
         )
 
     return _make
