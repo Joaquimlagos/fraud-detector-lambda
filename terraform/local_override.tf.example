@@ -1,0 +1,34 @@
+# ============================================
+# LOCALSTACK OVERRIDE (desenvolvimento local)
+# ============================================
+#
+# Uso:
+#   1. Suba o LocalStack a partir do repo fraud-detector-infra-aws:
+#      docker compose -f ../../fraud-detector-infra-aws/docker-compose.localstack.yml up -d
+#   2. Rode o apply no fraud-detector-infra-aws PRIMEIRO (cria fila/tabelas/tópico)
+#   3. cp local_override.tf.example local_override.tf
+#   4. cp local.tfvars.example local.tfvars
+#   5. terraform init && terraform apply -var-file=local.tfvars
+#
+# Aponta para o MESMO LocalStack do outro repo — não sobe um segundo
+# container. Ajuste o caminho do passo 1 conforme onde você clonou o
+# fraud-detector-infra-aws na sua máquina.
+
+provider "aws" {
+  region                      = "us-east-1"
+  access_key                  = "test"
+  secret_key                  = "test"
+  skip_credentials_validation = true
+  skip_metadata_api_check     = true
+  skip_requesting_account_id  = true
+
+  endpoints {
+    dynamodb = "http://localhost:4566"
+    sqs      = "http://localhost:4566"
+    sns      = "http://localhost:4566"
+    lambda   = "http://localhost:4566"
+    iam      = "http://localhost:4566"
+    sts      = "http://localhost:4566"
+    logs     = "http://localhost:4566"
+  }
+}

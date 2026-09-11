@@ -1,0 +1,3 @@
+# boto3 já vem pré-instalado no runtime da Lambda da AWS — listado aqui
+# só para desenvolvimento/testes locais, com a mesma versão major.
+boto3~=1.34

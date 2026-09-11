@@ -1,0 +1,1 @@
+"""Persistence adapters shared by scoring and investigation."""

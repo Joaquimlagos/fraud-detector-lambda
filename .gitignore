@@ -1,0 +1,39 @@
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/*.tfvars
+!terraform/*.tfvars.example
+terraform/crash.log
+terraform/crash.*.log
+
+# Override files (LocalStack) — nunca commitados, só locais
+terraform/*_override.tf
+!terraform/*_override.tf.example
+
+# Pacote gerado pelo archive_file (build artifact, não fonte)
+terraform/lambda-function.zip
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+env/
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.tox/
+*.log
+
+# Local tools and operating-system files
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
