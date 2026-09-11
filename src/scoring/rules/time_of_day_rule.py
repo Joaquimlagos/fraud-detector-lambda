@@ -1,16 +1,9 @@
-"""
-Regra: transações feitas de madrugada (janela configurável, padrão 2h-7h)
-têm risco maior e são sinalizadas como suspeitas.
-
-Nota: esta é uma regra deliberadamente simples, avaliada isoladamente —
-não decide sozinha se a transação é bloqueada, apenas contribui um motivo
-para o AnalysisEngine considerar junto com as outras regras.
-"""
+"""Flags transactions occurring during the configured high-risk hours."""
 from __future__ import annotations
 
-from src.config import Config
-from src.models.transaction_event import TransactionEvent
-from src.rules.base import FraudRule
+from src.shared.config import Config
+from src.shared.models.transaction_event import TransactionEvent
+from src.scoring.rules.base import FraudRule
 
 
 class TimeOfDayRule(FraudRule):

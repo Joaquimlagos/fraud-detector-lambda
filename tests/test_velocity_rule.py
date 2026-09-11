@@ -1,4 +1,4 @@
-from src.rules.velocity_rule import VelocityRule
+from src.scoring.rules.velocity_rule import VelocityRule
 
 
 def test_should_flag_transaction_when_history_exceeds_limit(make_transaction):

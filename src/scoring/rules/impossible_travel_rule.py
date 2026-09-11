@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import math
 
-from src.models.transaction_event import TransactionEvent
-from src.rules.base import FraudRule
+from src.shared.models.transaction_event import TransactionEvent
+from src.scoring.rules.base import FraudRule
 
 
 class ImpossibleTravelRule(FraudRule):
@@ -52,9 +52,7 @@ def _latest_transaction_before(
     return max(previous_transactions, key=lambda item: item.occurred_at, default=None)
 
 
-def _has_coordinates(
-    first: TransactionEvent, second: TransactionEvent
-) -> bool:
+def _has_coordinates(first: TransactionEvent, second: TransactionEvent) -> bool:
     return all(
         value is not None
         for value in (

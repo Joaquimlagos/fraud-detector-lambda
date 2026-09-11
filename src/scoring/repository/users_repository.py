@@ -1,9 +1,9 @@
-"""Access to users stored in DynamoDB."""
+"""Access to users required by the scoring flow."""
 from __future__ import annotations
 
 import boto3
 
-from src.config import Config
+from src.shared.config import Config
 
 _dynamodb = boto3.resource("dynamodb")
 
@@ -14,8 +14,6 @@ class UsersRepository:
 
     def exists(self, user_id: str) -> bool:
         response = self._table.get_item(
-            Key={"userId": user_id},
-            ProjectionExpression="userId",
-            ConsistentRead=True,
+            Key={"userId": user_id}, ProjectionExpression="userId", ConsistentRead=True
         )
         return "Item" in response

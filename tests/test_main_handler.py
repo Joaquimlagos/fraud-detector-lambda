@@ -11,7 +11,7 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from src.config import Config
+from src.shared.config import Config
 
 
 def _sqs_record(transaction_id: str, occurred_at_iso: str) -> dict:

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from src.rules.time_of_day_rule import TimeOfDayRule
+from src.scoring.rules.time_of_day_rule import TimeOfDayRule
 
 
 def test_should_flag_transaction_when_inside_suspicious_window(make_transaction):

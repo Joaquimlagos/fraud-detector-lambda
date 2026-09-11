@@ -1,6 +1,6 @@
-from src.models.analysis_result import TransactionStatus
-from src.rules.base import FraudRule
-from src.rules.engine import AnalysisEngine
+from src.shared.models.analysis_result import TransactionStatus
+from src.scoring.rules.base import FraudRule
+from src.scoring.rules.engine import AnalysisEngine
 
 
 class _AlwaysTriggersRule(FraudRule):

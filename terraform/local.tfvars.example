@@ -3,3 +3,6 @@
 environment  = "dev"
 aws_region   = "us-east-1"
 project_name = "fraud-detector"
+llm_base_url = "http://host.docker.internal:20128/v1"
+llm_model    = "fraud-detector-9router"
+# Keep the API key in the root .env file as TF_VAR_llm_api_key.

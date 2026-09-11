@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from src.rules.impossible_travel_rule import ImpossibleTravelRule
+from src.scoring.rules.impossible_travel_rule import ImpossibleTravelRule
 
 
 def test_should_flag_physically_impossible_travel(make_transaction):

@@ -1,16 +1,12 @@
-"""
-Orquestra a lista de regras. Adicionar uma nova regra de fraude no futuro
-significa criar uma nova classe FraudRule e adicioná-la à lista abaixo —
-nenhum outro código precisa mudar (Open/Closed Principle).
-"""
+"""Orchestrates the registered fraud scoring rules."""
 from __future__ import annotations
 
-from src.models.analysis_result import AnalysisResult
-from src.models.transaction_event import TransactionEvent
-from src.rules.base import FraudRule
-from src.rules.impossible_travel_rule import ImpossibleTravelRule
-from src.rules.time_of_day_rule import TimeOfDayRule
-from src.rules.velocity_rule import VelocityRule
+from src.shared.models.analysis_result import AnalysisResult
+from src.shared.models.transaction_event import TransactionEvent
+from src.scoring.rules.base import FraudRule
+from src.scoring.rules.impossible_travel_rule import ImpossibleTravelRule
+from src.scoring.rules.time_of_day_rule import TimeOfDayRule
+from src.scoring.rules.velocity_rule import VelocityRule
 
 DEFAULT_RULES: list[FraudRule] = [
     ImpossibleTravelRule(),

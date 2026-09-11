@@ -25,3 +25,22 @@ variable "lambda_code_path" {
   type        = string
   default     = ".."
 }
+
+variable "llm_base_url" {
+  description = "OpenAI-compatible base URL exposed by the local 9router gateway."
+  type        = string
+  default     = ""
+}
+
+variable "llm_api_key" {
+  description = "Optional API key for the 9router gateway."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "llm_model" {
+  description = "Model name accepted by the 9router gateway."
+  type        = string
+  default     = ""
+}

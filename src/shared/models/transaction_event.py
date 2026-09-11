@@ -1,8 +1,4 @@
-"""
-Representa o contrato de mensagem publicado pelo repositório
-fraud-detector-api. Campos adicionais do payload são aceitos para manter o
-consumidor compatível com a mensagem completa da API.
-"""
+"""Transaction contract shared by the SQS and direct-invocation flows."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -30,13 +26,10 @@ class TransactionEvent:
     billing_country: str | None = None
 
     @staticmethod
-    def from_dict(
-        data: dict, fallback_transaction_id: str | None = None
-    ) -> "TransactionEvent":
+    def from_dict(data: dict, fallback_transaction_id: str | None = None) -> "TransactionEvent":
         transaction_id = data.get("transactionId", fallback_transaction_id)
         if transaction_id is None:
             raise KeyError("transactionId")
-
         return TransactionEvent(
             transaction_id=transaction_id,
             user_id=data["userId"],
@@ -58,16 +51,9 @@ class TransactionEvent:
 
 
 def _parse_instant(value: str) -> datetime:
-    """Converte um Instant serializado pelo Jackson (ISO-8601, ex:
-    '2026-08-20T05:12:33.123Z') para datetime timezone-aware em UTC."""
-    normalized = value.replace("Z", "+00:00")
-    parsed = datetime.fromisoformat(normalized)
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
 
 
 def _optional_float(value: object) -> float | None:
-    if value is None:
-        return None
-    return float(value)
+    return None if value is None else float(value)

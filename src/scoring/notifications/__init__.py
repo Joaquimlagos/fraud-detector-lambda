@@ -1,0 +1,1 @@
+"""Notifications emitted by the scoring flow."""

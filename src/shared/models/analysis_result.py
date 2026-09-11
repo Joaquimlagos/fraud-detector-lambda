@@ -1,4 +1,4 @@
-"""Resultado da análise de fraude para uma transação."""
+"""Scoring result consumed by persistence and optional RAG context."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -21,8 +21,8 @@ class AnalysisResult:
 
     @staticmethod
     def approved() -> "AnalysisResult":
-        return AnalysisResult(status=TransactionStatus.APPROVED, reasons=[])
+        return AnalysisResult(TransactionStatus.APPROVED)
 
     @staticmethod
     def suspicious(reasons: list[str]) -> "AnalysisResult":
-        return AnalysisResult(status=TransactionStatus.SUSPICIOUS, reasons=reasons)
+        return AnalysisResult(TransactionStatus.SUSPICIOUS, reasons)

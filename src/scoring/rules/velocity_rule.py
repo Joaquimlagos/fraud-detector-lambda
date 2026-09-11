@@ -1,18 +1,9 @@
-"""
-Regra: muitas transações do mesmo usuário em pouco tempo (velocity check)
-são sinalizadas como suspeitas — o exemplo clássico de fraude que só
-aparece quando se olha o padrão agregado, não uma transação isolada.
-
-Depende do histórico recente já filtrado pela janela de tempo correta —
-essa filtragem é responsabilidade do repository (via query no DynamoDB),
-não desta regra. A regra só conta quantas transações vieram nesse
-histórico e compara com o limite.
-"""
+"""Flags excessive transaction velocity for one user."""
 from __future__ import annotations
 
-from src.config import Config
-from src.models.transaction_event import TransactionEvent
-from src.rules.base import FraudRule
+from src.shared.config import Config
+from src.shared.models.transaction_event import TransactionEvent
+from src.scoring.rules.base import FraudRule
 
 
 class VelocityRule(FraudRule):

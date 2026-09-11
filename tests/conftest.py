@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 
-# Precisa ser definido ANTES de qualquer import de src.config/src.main,
+# Precisa ser definido ANTES de qualquer import de src.shared.config/src.main,
 # já que Config lê os.environ no momento da importação da classe.
 os.environ.setdefault("TRANSACTIONS_TABLE", "test-transactions")
 os.environ.setdefault("USERS_TABLE", "test-users")
@@ -21,7 +21,7 @@ from decimal import Decimal
 
 import pytest
 
-from src.models.transaction_event import TransactionEvent
+from src.shared.models.transaction_event import TransactionEvent
 
 
 @pytest.fixture

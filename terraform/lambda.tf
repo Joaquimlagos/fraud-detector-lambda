@@ -18,7 +18,16 @@ data "archive_file" "lambda_package" {
     "*.pyc",
     ".pytest_cache",
     "tests",
-    "terraform/*"
+    "terraform/*",
+    ".git",
+    ".git/*",
+    ".env",
+    ".env.*",
+    "*.tfstate",
+    "*.tfstate.*",
+    "*.tfvars",
+    "*_override.tf",
+    "*.zip"
   ]
 }
 
@@ -26,7 +35,7 @@ resource "aws_lambda_function" "fraud_detection" {
   filename         = data.archive_file.lambda_package.output_path
   function_name    = "${var.project_name}-fraud-detection-${var.environment}"
   role             = aws_iam_role.lambda_role.arn
-  handler          = "src.main.handler"
+  handler          = "src.scoring.handler.handler"
   source_code_hash = data.archive_file.lambda_package.output_base64sha256
   runtime          = "python3.11"
   timeout          = 30
@@ -54,4 +63,49 @@ resource "aws_lambda_event_source_mapping" "sqs_trigger" {
   batch_size              = 5
   enabled                 = true
   function_response_types = ["ReportBatchItemFailures"]
+}
+
+resource "aws_dynamodb_table" "analysis" {
+  name         = "${var.project_name}-analysis-${var.environment}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "transactionId"
+
+  attribute {
+    name = "transactionId"
+    type = "S"
+  }
+
+  tags = {
+    Name    = "${var.project_name}-analysis-${var.environment}"
+    Service = "lambda-analysis"
+  }
+}
+
+resource "aws_lambda_function" "analysis" {
+  filename         = data.archive_file.lambda_package.output_path
+  function_name    = "${var.project_name}-analysis-${var.environment}"
+  role             = aws_iam_role.analysis_role.arn
+  handler          = "src.analysis.handler.handler"
+  source_code_hash = data.archive_file.lambda_package.output_base64sha256
+  runtime          = "python3.11"
+  timeout          = 30
+  memory_size      = 256
+
+  environment {
+    variables = {
+      TRANSACTIONS_TABLE = data.aws_dynamodb_table.transactions.name
+      USERS_TABLE        = data.aws_dynamodb_table.users.name
+      SNS_TOPIC_ARN      = data.aws_sns_topic.fraud_alerts.arn
+      ANALYSIS_TABLE     = aws_dynamodb_table.analysis.name
+      LLM_BASE_URL       = var.llm_base_url
+      LLM_API_KEY        = var.llm_api_key
+      LLM_MODEL          = var.llm_model
+      ENVIRONMENT        = var.environment
+    }
+  }
+
+  tags = {
+    Name    = "${var.project_name}-analysis-${var.environment}"
+    Service = "lambda-analysis"
+  }
 }

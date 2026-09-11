@@ -9,22 +9,24 @@ This repo is **one of three** that make up the `fraud-detector` portfolio projec
 | Repository | Responsibility |
 |---|---|
 | `fraud-detector-api` | Java/Spring Boot. Validates transaction *shape* and publishes to SQS. **Never** decides if a transaction is suspicious. |
-| **`fraud-detector-lambda`** (this repo) | Consumes the SQS queue, queries the user's transaction history in DynamoDB, applies fraud rules, persists the result, and publishes an SNS alert when suspicious. |
+| **`fraud-detector-lambda`** (this repo) | Runs asynchronous SQS scoring and direct-invocation RAG investigation using DynamoDB and 9router. |
 | `fraud-detector-infra-aws` | Terraform for the shared infrastructure: DynamoDB tables, SQS queue, SNS topic. |
 
 ```
-fraud-detector-api  —(SQS)→  fraud-detector-lambda  —(DynamoDB)→
-                                    |
-                                    └—(SNS, only if suspicious)→ email
+fraud-detector-api  —(SQS)→ scoring Lambda —(DynamoDB)→ fraud result
+  |
+  └—(RequestResponse)→ analysis Lambda —(DynamoDB/retrieval)→ 9router/LLM
+             |
+             └—(SNS from scoring, only if suspicious)→ email
 ```
 
 **Hard rule: all fraud/business-logic decisions live here, not in the API.** The API only validates structure (required fields, format). This Lambda is the single source of truth for "is this transaction suspicious."
 
-## Message contract with fraud-detector-api
+## Scoring message contract with fraud-detector-api
 
 The SQS message consumed here is produced by `fraud-detector-api`. Any change to this contract must be coordinated across repos — there is no shared code or shared types between them, only this documented contract.
 
-> ⚠️ Confirm the exact field names/types against `models/transaction_event.py` before relying on this table — fill it in as the contract solidifies:
+The exact field names/types are defined in `src/shared/models/transaction_event.py` and must stay coordinated with the API:
 
 | Field | Type | Notes |
 |---|---|---|
@@ -38,20 +40,22 @@ The SQS message consumed here is produced by `fraud-detector-api`. Any change to
 
 ```
 src/
-  models/
-    analysis_result.py        # Output shape: verdict/score produced by the rule engine
-    transaction_event.py      # Deserialized shape of the incoming SQS message (the contract above)
-  notifications/
-    sns_notifier.py           # Publishes to SNS when a transaction is flagged
-  repository/
-    transactions_repository.py  # DynamoDB access: reads user history, persists analysis_result
-  rules/
-    base.py                   # Strategy pattern interface — all fraud rules implement this
-    engine.py                 # Orchestrates: runs all registered rules, aggregates verdict
-    time_of_day_rule.py        # Concrete rule: flags transactions at unusual hours
-    velocity_rule.py           # Concrete rule: flags abnormal transaction frequency
-  config.py                   # Environment/config loading
-  main.py                     # Lambda entry point (handler): SQS trigger → engine → repository/notifier
+  shared/
+    config.py                 # Environment configuration for both flows
+    models/                   # TransactionEvent and AnalysisResult contracts
+    repository/               # Shared DynamoDB transaction/history access
+  scoring/
+    handler.py                # SQS Lambda entry point
+    rules/                    # Pure fraud scoring strategies and engine
+    notifications/            # SNS alerts for suspicious scoring results
+    repository/               # Scoring-only user existence access
+  analysis/
+    handler.py                # Direct invocation entry point: {transactionId}
+    cache.py                  # Investigation result cache
+    retrieval/vector_search.py # Local-friendly similarity retrieval
+    prompt_builder.py         # Transaction + rules + similar-case prompt
+    llm_client.py             # 9router OpenAI-compatible client
+  main.py                     # Backward-compatible import of scoring.handler
 terraform/
   data.tf, iam.tf, lambda.tf, outputs.tf, providers.tf, variables.tf
   local_override.tf.example, local.tfvars.example, terraform.tfvars.example
@@ -60,38 +64,67 @@ pytest.ini
 requirements.txt / requirements-dev.txt
 ```
 
-## Rules engine (Strategy Pattern)
+## Scoring rules engine (Strategy Pattern)
 
-- `rules/base.py` defines the interface every rule must implement (input: `transaction_event` + user history, output: a partial/contribution to `analysis_result`).
-- `rules/engine.py` is the only place that knows about *all* rules — it registers and runs them in sequence and aggregates their outputs into a final verdict.
-- Existing rules: `time_of_day_rule.py`, `velocity_rule.py`.
+- `scoring/rules/base.py` defines the interface every rule must implement (input: `transaction_event` + user history, output: a partial/contribution to `analysis_result`).
+- `scoring/rules/engine.py` is the only place that knows about *all* rules — it registers and runs them in sequence and aggregates their outputs into a final verdict.
+- Existing rules: `time_of_day_rule.py`, `velocity_rule.py`, and `impossible_travel_rule.py`.
 
 ### How to add a new rule
-1. Create `rules/<name>_rule.py` implementing the interface in `rules/base.py`.
-2. Register it in `rules/engine.py`.
+1. Create `scoring/rules/<name>_rule.py` implementing the interface in `scoring/rules/base.py`.
+2. Register it in `scoring/rules/engine.py`.
 3. Add a focused unit test under `tests/` exercising the rule in isolation (mock history/input, assert verdict contribution).
-4. Do not put any AWS/IO calls inside a rule — rules are pure logic; DynamoDB access stays in `repository/`.
+4. Do not put any AWS/IO calls inside a rule — rules are pure logic; DynamoDB access stays in `shared/repository/`.
 
-## Repository layer
+## Shared repository layer
 
-`repository/transactions_repository.py` is the only module allowed to talk to DynamoDB. It's responsible for:
+`shared/repository/transactions_repository.py` is the only module allowed to talk to the transactions DynamoDB table. It's responsible for:
 - Fetching the user's transaction history needed by the rules (e.g. for `velocity_rule`).
 - Persisting the `analysis_result` after the engine runs.
+- Loading a transaction and its scoring result for the analysis flow.
+- Scanning stored transactions for local-friendly similarity retrieval.
 
-Do not query DynamoDB directly from `rules/` or `main.py` — always go through this module.
+Do not query the transactions table directly from `scoring/rules/` or `analysis/` — always go through this module. The RAG cache has its own adapter in `analysis/cache.py`.
 
-## Notifications
+## Scoring notifications
 
-`notifications/sns_notifier.py` publishes an SNS alert **only when the aggregated verdict from the engine is suspicious**. Non-suspicious transactions are persisted but do not trigger a notification.
+`scoring/notifications/sns_notifier.py` publishes an SNS alert **only when the aggregated verdict from the scoring engine is suspicious**. Non-suspicious transactions are persisted but do not trigger a notification. The RAG flow does not publish SNS alerts.
 
-## Entry point flow (`main.py`)
+## Scoring entry point flow (`scoring/handler.py`)
 
 1. Deserialize the SQS message into `transaction_event`.
 2. Validate the `userId` exists (this Lambda's responsibility, not the API's — see architecture decision below). If it doesn't, reject the message (log + route to DLQ) instead of running it through the rule engine.
 3. Fetch relevant history via `transactions_repository`.
-4. Run `rules/engine.py` to get an `analysis_result`.
-5. Persist the result via `transactions_repository`.
+4. Run `scoring/rules/engine.py` to get an `analysis_result`.
+5. Persist the result via `shared/repository/transactions_repository.py`.
 6. If suspicious, notify via `sns_notifier`.
+
+## RAG analysis flow (`analysis/handler.py`)
+
+The Java API invokes this Lambda directly with AWS SDK `InvocationType.REQUEST_RESPONSE`; it does not publish an analysis request to SQS.
+
+Input contract:
+
+```json
+{"transactionId":"abc-123"}
+```
+
+The handler validates the ID, checks `analysis/cache.py`, loads the transaction and scoring result, retrieves similar cases, builds a prompt, and calls the configured 9router gateway. The prompt contains only transaction fields, triggered scoring reasons, and retrieved-case identifiers/similarities. The model must explain the status using only that context and must not invent facts.
+
+The analysis result is saved with reasoning, status, similar cases, and timestamp. The public response intentionally contains only:
+
+```json
+{
+  "transactionId": "abc-123",
+  "status": "suspicious",
+  "reasoning": "...",
+  "cached": false
+}
+```
+
+`similarCases` remains internal to retrieval, prompting, and cache persistence; it is not returned to the Java API.
+
+The LLM client calls `POST {LLM_BASE_URL}/chat/completions` and supports standard JSON responses and the 9router response format that uses `Content-Type: text/event-stream` with a trailing `data: [DONE]` marker. The client is mockable and tests must never call the real gateway.
 
 ## Architecture decisions to respect
 
@@ -103,6 +136,9 @@ Do not query DynamoDB directly from `rules/` or `main.py` — always go through 
 
 - `terraform/local_override.tf.example` and `terraform/local.tfvars.example` — copy and adapt for local/LocalStack testing, consistent with how `fraud-detector-api` is already wired to LocalStack.
 - `terraform/terraform.tfvars.example` — template for real AWS deployment variables.
+- `llm_base_url`, `llm_model`, and `llm_api_key` configure the analysis Lambda's 9router gateway. Keep secrets in ignored local/secret Terraform variable files.
+- Keep `llm_api_key` out of `terraform/local.tfvars`; load it from an ignored root `.env` as `TF_VAR_llm_api_key` before running Terraform.
+- Terraform outputs `analysis_lambda_function_name` and `analysis_lambda_function_arn` for the Java API integration.
 
 ## Testing
 
@@ -113,7 +149,7 @@ Do not query DynamoDB directly from `rules/` or `main.py` — always go through 
 
 ## Conventions for the agent
 
-- Keep `rules/` free of AWS SDK calls — pure functions/classes only.
-- Any change to the SQS message shape must be reflected in `models/transaction_event.py` **and** flagged to the user, since `fraud-detector-api` must be updated in lockstep (no shared types across repos).
+- Keep `scoring/rules/` free of AWS SDK calls — pure functions/classes only.
+- Any change to the SQS message shape must be reflected in `shared/models/transaction_event.py` **and** flagged to the user, since `fraud-detector-api` must be updated in lockstep (no shared types across repos).
 - Prefer extending the Strategy pattern (new rule file) over branching logic inside `engine.py`.
 - When in doubt about which repo owns a piece of logic, default to: shape validation → API, existence/business validation and fraud decisions → this Lambda, infrastructure → `fraud-detector-infra-aws`.

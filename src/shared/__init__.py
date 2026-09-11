@@ -1,0 +1,1 @@
+"""Contracts and infrastructure shared by scoring and investigation flows."""
